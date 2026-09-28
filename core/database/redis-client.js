@@ -6,16 +6,27 @@ import Redis from "ioredis";
 const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 function createRedisInstance() {
-  const client = new Redis(REDIS_URL, {
+  const isTls = REDIS_URL.startsWith("rediss://");
+
+  const options = {
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
-    connectTimeout: 5000,
+    connectTimeout: 10000,
+    keepAlive: 10000, // Prevents cloud firewalls from dropping idle socket connections
     retryStrategy(times) {
-      // Exponential backoff with a maximum delay of 3000ms
       const delay = Math.min(times * 100, 3000);
       return delay;
     },
-  });
+  };
+
+  if (isTls) {
+    options.tls = {
+      // Allows connecting to Cloud Redis with TLS in-transit encryption
+      rejectUnauthorized: process.env.REDIS_ALLOW_SELF_SIGNED ? false : true,
+    };
+  }
+
+  const client = new Redis(REDIS_URL, options);
 
   client.on("connect", () => {
     if (process.env.NODE_ENV !== "production") {
